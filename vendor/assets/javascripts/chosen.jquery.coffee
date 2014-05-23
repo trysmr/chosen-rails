@@ -8,9 +8,9 @@ $.fn.extend({
     this.each (input_field) ->
       $this = $ this
       chosen = $this.data('chosen')
-      if options is 'destroy' && chosen
+      if options is 'destroy' && chosen instanceof Chosen
         chosen.destroy()
-      else unless chosen
+      else unless chosen instanceof Chosen
         $this.data('chosen', new Chosen(this, options))
 
       return
@@ -66,6 +66,9 @@ class Chosen extends AbstractChosen
     @form_field_jq.trigger("chosen:ready", {chosen: this})
 
   register_observers: ->
+    @container.bind 'touchstart.chosen', (evt) => this.container_mousedown(evt); return
+    @container.bind 'touchend.chosen', (evt) => this.container_mouseup(evt); return
+
     @container.bind 'mousedown.chosen', (evt) => this.container_mousedown(evt); return
     @container.bind 'mouseup.chosen', (evt) => this.container_mouseup(evt); return
     @container.bind 'mouseenter.chosen', (evt) => this.mouse_enter(evt); return
@@ -120,6 +123,7 @@ class Chosen extends AbstractChosen
 
   container_mousedown: (evt) ->
     if !@is_disabled
+      this.search_converted()
       if evt and evt.type is "mousedown" and not @results_showing
         evt.preventDefault()
 
@@ -396,14 +400,19 @@ class Chosen extends AbstractChosen
     if @search_field.val() is @default_text then "" else $('<div/>').text($.trim(@search_field.val())).html()
 
   winnow_results_set_highlight: ->
-
     selected_results = if not @is_multiple then @search_results.find(".result-selected.active-result") else []
     do_high = if selected_results.length then selected_results.first() else @search_results.find(".active-result").first()
 
     this.result_do_highlight do_high if do_high?
 
   no_results: (terms) ->
-    no_results_html = $('<li class="no-results">' + @results_none_found + ' "<span></span>"</li>')
+    html_temp = '<li class="no-results">'
+    if @prefix_terms
+      html_temp += '"<span></span>" ' + @results_none_found
+    else
+      html_temp += @results_none_found + ' "<span></span>"'
+    html_temp += '</li>'
+    no_results_html = $(html_temp)
     no_results_html.find("span").first().html(terms)
 
     @search_results.append no_results_html
@@ -463,7 +472,8 @@ class Chosen extends AbstractChosen
         @mouse_on_container = false
         break
       when 13
-        evt.preventDefault()
+        @keydown_enter = true if $.browser.mozilla
+        evt.preventDefault() if this.results_showing
         break
       when 38
         evt.preventDefault()
@@ -472,6 +482,9 @@ class Chosen extends AbstractChosen
       when 40
         evt.preventDefault()
         this.keydown_arrow()
+        break
+      when 229
+        @converting = true
         break
 
   search_field_scale: ->

@@ -29,6 +29,8 @@ class AbstractChosen
     @inherit_select_classes = @options.inherit_select_classes || false
     @display_selected_options = if @options.display_selected_options? then @options.display_selected_options else true
     @display_disabled_options = if @options.display_disabled_options? then @options.display_disabled_options else true
+    # For Japanese
+    @prefix_terms = @options.prefix_terms || false
 
   set_default_text: ->
     if @form_field.getAttribute("data-placeholder")
@@ -53,6 +55,12 @@ class AbstractChosen
     if not @mouse_on_container
       @active_field = false
       setTimeout (=> this.blur_test()), 100
+
+  # For Japanese
+  search_converted: ->
+    if @converting
+      this.results_search()
+      @converting = false
 
   results_option_build: (options) ->
     content = ''
@@ -131,9 +139,8 @@ class AbstractChosen
 
     searchText = this.get_search_text()
     escapedSearchText = searchText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")
-    regexAnchor = if @search_contains then "" else "^"
-    regex = new RegExp(regexAnchor + escapedSearchText, 'i')
     zregex = new RegExp(escapedSearchText, 'i')
+    regex = this.get_search_regex(escapedSearchText)
 
     for option in @results_data
 
@@ -153,7 +160,7 @@ class AbstractChosen
                 
         unless option.group and not @group_search
 
-          option.search_text = if option.group then option.label else option.html
+          option.search_text = if option.group then option.label else option.text
           option.search_match = this.search_string_match(option.search_text, regex)
           results += 1 if option.search_match and not option.group
 
@@ -176,6 +183,10 @@ class AbstractChosen
     else
       this.update_results_content this.results_option_build()
       this.winnow_results_set_highlight()
+
+  get_search_regex: (escaped_search_string) ->
+    regex_anchor = if @search_contains then "" else "^"
+    new RegExp(regex_anchor + escaped_search_string, 'i')
 
   search_string_match: (search_string, regex) ->
     if regex.test search_string
@@ -214,13 +225,27 @@ class AbstractChosen
           this.results_search()
       when 13
         evt.preventDefault()
-        this.result_select(evt) if this.results_showing
+        if @converting
+          this.search_converted()
+        else
+          unless $.browser.mozilla
+            this.result_select(evt) if this.results_showing
+          else if @keydown_enter
+              this.result_select(evt) if this.results_showing
+              @keydown_enter = false
+          else
+            this.results_search()
       when 27
         this.results_hide() if @results_showing
         return true
-      when 9, 38, 40, 16, 91, 17
+      when 9
+        if @converting
+          this.search_converted()
+        else if $.browser.mozilla
+          this.results_search()
+      when 38, 40, 16, 91, 17
         # don't do anything on these keys
-      else this.results_search()
+      else this.results_search() unless @converting
 
   clipboard_event_checker: (evt) ->
     setTimeout (=> this.results_search()), 50
